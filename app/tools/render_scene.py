@@ -1,6 +1,8 @@
-from models import Node, Frame
-import plotly.graph_objects as go
+from app.models import Node, Frame
+import plotly.graph_objects as go #type: ignore
+import plotly.express as px
 import numpy as np
+
 
 def compute_beam_vertices(A, B, width=0.1):
     """
@@ -12,7 +14,7 @@ def compute_beam_vertices(A, B, width=0.1):
     if norm_v == 0:
         raise ValueError("Zero length beam")
     v_hat = v / norm_v
-    
+
     # Choose an arbitrary vector that is not parallel to v_hat.
     a = np.array([0, 0, 1])
     if abs(np.dot(v_hat, a)) > 0.99:
@@ -89,7 +91,7 @@ def add_beam_mesh(fig, vertices, color="teal"):
     )
     fig.add_trace(beam_trace)
 
-def plot_3d_scene(nodes: dict[int, Node], lines: dict[int, Frame]) -> go.Figure:
+def plot_3d_scene(nodes: dict[str, Node], lines: dict[str, Frame]) -> go.Figure:
     # Ensure each node is an instance of Node.
     for node_id, node in nodes.items():
         if not isinstance(node, Node):
@@ -109,7 +111,6 @@ def plot_3d_scene(nodes: dict[int, Node], lines: dict[int, Frame]) -> go.Figure:
     y_range = y_max - y_min
     z_range = z_max - z_min
     max_range = max(x_range, y_range, z_range)
-    
     
     # Compute the center for each axis.
     center_x = (x_max + x_min) / 2
@@ -137,8 +138,8 @@ def plot_3d_scene(nodes: dict[int, Node], lines: dict[int, Frame]) -> go.Figure:
     
     # Render each frame as a beam using keys "nodeI" and "nodeJ".
     for frame in lines.values():
-        node1 = nodes[frame["nodeI"]]
-        node2 = nodes[frame["nodeJ"]]
+        node1 = nodes[str(frame["nodeI"])]
+        node2 = nodes[str(frame["nodeJ"])]
         
         A = np.array([node1.x, node1.y, node1.z])
         B = np.array([node2.x, node2.y, node2.z])
@@ -188,5 +189,18 @@ def plot_3d_scene(nodes: dict[int, Node], lines: dict[int, Frame]) -> go.Figure:
         margin=dict(l=0, r=0, t=30, b=0)
     )
     
-    fig.show()
+    # Remove fig.show() so that we can dump the complete figure as JSON.
+    return fig
+
+
+def default_blank_scene():
+    fig = go.Figure()
+    fig.update_layout(
+        template=None,
+        xaxis=dict(visible=False, showgrid=False, zeroline=False, showline=False),
+        yaxis=dict(visible=False, showgrid=False, zeroline=False, showline=False),
+        paper_bgcolor='white',
+        plot_bgcolor='white',
+        margin=dict(l=0, r=0, t=0, b=0)
+    )
     return fig

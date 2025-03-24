@@ -1,8 +1,22 @@
 import io
-import pandas as pd
-from models import Node, Group, Frame, Section
+import time
+import pandas as pd #type: ignore
+from functools import cache
 
+from app.models import Node, Group, Frame, Section, CombForcesDict,ForceEntry
+from functools import wraps
 
+def timer(fun):
+    @wraps(fun)
+    def wrapped(*args, **kwargs):
+        start = time.time()
+        out = fun(*args, **kwargs)
+        print(f"Execution time for {fun.__name__}, was: {time.time()-start}")
+        return out
+    return wrapped
+
+@timer
+@cache
 def extract_sheets(file_content):
     sheet_names = [
         "Objects and Elements - Joints",
@@ -11,6 +25,8 @@ def extract_sheets(file_content):
         "Frame Assigns - Sect Prop",
         "Element Joint Forces - Frame",
         "Column Object Connectivity",
+        "Element Forces - Beams",
+        "Element Forces - Columns"
     ]
     dataframes = {}
     # Create a BytesIO object from the file content
@@ -24,7 +40,7 @@ def extract_sheets(file_content):
             dataframes[sheet] = pd.read_excel(excel_file, sheet_name=sheet, skiprows=1)
     return dataframes
 
-
+@timer
 def get_groups(file_content):
     sheet_name = "Group Assignments"
     excel_data = io.BytesIO(file_content)
@@ -34,7 +50,7 @@ def get_groups(file_content):
     group_names = groups_df_cleaned["Group Name"].unique().tolist()
     return group_names
 
-
+@timer
 def get_load_combos(file_content):
     sheet_name = ["Element Joint Forces - Frame"]
     if not isinstance(file_content, str):
@@ -50,7 +66,43 @@ def get_load_combos(file_content):
     combos = df_combination["Output Case"].unique().tolist()
     return combos
 
+@timer
+def get_internal_loads(file_content)-> CombForcesDict:
 
+    beam_sheet_name = "Element Forces - Beams"
+    columns_sheet_name = "Element Forces - Columns"
+    sheets_data = extract_sheets(file_content)
+
+    df_beams = sheets_data[beam_sheet_name]
+    df_columns = sheets_data[columns_sheet_name]
+
+    element_forces = pd.concat([df_beams, df_columns], ignore_index=True)
+    df_combination = element_forces[element_forces["Case Type"] == "Combination"]
+
+    comb_forces_dict:CombForcesDict = {}
+    # Group the DataFrame by 'Unique Name', 'Output Case', and 'Joint'
+    grouped = df_combination.groupby(["Unique Name", "Output Case", "Station"])
+    for (unique_name, output_case, station), group in grouped:
+        if unique_name not in comb_forces_dict:
+            comb_forces_dict[unique_name] = {}
+        if output_case not in comb_forces_dict[unique_name]:
+            comb_forces_dict[unique_name][output_case] = {}
+        entries = []
+        for idx, row in group.iterrows():
+            entry = ForceEntry(
+                P=row["P"],
+                V2=row["V2"],
+                V3=row["V3"],
+                T=row["T"],
+                M2=row["M2"],
+                M3=row["M3"],
+            )
+            entries.append(entry)
+        comb_forces_dict[unique_name][output_case][station] = entries
+
+    return comb_forces_dict
+
+@timer
 def get_entities(file_content)->tuple[dict[int, Node], dict[int, Frame], dict[int, Section], dict]:
     nodes_dict = {}
     frame_dicts = {}
@@ -72,7 +124,7 @@ def get_entities(file_content)->tuple[dict[int, Node], dict[int, Frame], dict[in
             y = float(row["Global Y"])
             z = float(row["Global Z"])
             node = Node(id=node_id, x=x, y=y, z=z)
-            nodes_dict.update({node_id: node.model_dump()})
+            nodes_dict.update({str(node_id): node.model_dump()})
 
 
     # Create Frames
@@ -83,7 +135,7 @@ def get_entities(file_content)->tuple[dict[int, Node], dict[int, Frame], dict[in
             nodeI = int(row["UniquePtI"])
             nodeJ = int(row["UniquePtJ"])
             frame = Frame(id=frame_id, nodeI=nodeI, nodeJ=nodeJ)
-            frame_dicts.update({frame_id: frame.model_dump()})
+            frame_dicts.update({str(frame_id): frame.model_dump()})
 
     beam_df_cleaned = beam_df.dropna(subset=["Unique Name", "UniquePtI", "UniquePtJ"])
     for _, row in beam_df_cleaned.iterrows():
@@ -92,7 +144,7 @@ def get_entities(file_content)->tuple[dict[int, Node], dict[int, Frame], dict[in
             nodeI = int(row["UniquePtI"])
             nodeJ = int(row["UniquePtJ"])
             frame = Frame(id=frame_id, nodeI=nodeI, nodeJ=nodeJ)
-            frame_dicts.update({frame_id: frame.model_dump()})
+            frame_dicts.update({str(frame_id): frame.model_dump()})
 
     # Create sections
     frame_assigns_summary_df_cleaned = frame_assigns_summary_df.dropna(subset=["Section Property", "UniqueName"])
@@ -133,12 +185,14 @@ def get_entities(file_content)->tuple[dict[int, Node], dict[int, Frame], dict[in
     return nodes_dict, frame_dicts, section_dicts, comb_forces_dict
 
 
+@timer
 def get_section_by_id(sections, section_id):
     for section_name, section_vals in sections.items():
         if section_id in section_vals["frame_ids"]:
             return section_name
 
 
+@timer
 def process_etabs_file(file_content):
     # Read the file into a dataframe
     sheet_names = ["Joint Reactions", "Objects and Elements - Joints"]

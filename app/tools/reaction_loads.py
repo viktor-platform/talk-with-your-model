@@ -1,4 +1,4 @@
-import plotly.graph_objects  as go
+import plotly.graph_objects  as go #type: ignore
 def plot_reaction(merged_df, load_case):
     print(f"{load_case=}")
 
@@ -45,5 +45,5 @@ def plot_reaction(merged_df, load_case):
         tickvals=filtered_df["Global Y"],
         ticktext=[f"{y / 1000:.3f}" for y in filtered_df["Global Y"]],
     )
-    fig.show()
+    # fig.show()
     return fig

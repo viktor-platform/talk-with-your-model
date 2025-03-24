@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Plotly Scene with Alternating Chat</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    /* Make the page fill the entire window */
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: sans-serif;
+      background-color: #f0f4f8;
+    }
+    /* Container to hold everything in a column layout */
+    #page-container {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      position: relative;
+    }
+
+    /* Plotly div fills the top portion */
+    #plotly-div {
+      flex: 1; /* fill remaining space */
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+    }
+
+    /********************************************************
+     * Input bar pinned at bottom-center
+     ********************************************************/
+    #searchBarContainer {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 400px;
+      display: flex;
+      justify-content: center;
+      z-index: 10;
+    }
+    #searchBar {
+      background-color: #fff;
+      border: 1px solid #aaa;
+      border-radius: 22px;
+      padding: 5px 15px;
+      width: 100%;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+      display: flex;
+      align-items: center;
+    }
+    #searchInput {
+      border: none;
+      margin-left: 10px;
+      flex-grow: 1;
+      background-color: transparent;
+      color: #333;
+    }
+    /* Send button */
+    #searchButton {
+      background-color: #333;
+      border: none;
+      color: #fff;
+      padding: 5px 10px;
+      border-radius: 50%;
+      cursor: pointer;
+    }
+    #searchButton:hover {
+      background-color: #555;
+    }
+    /* Minimize button (next to send) */
+    #minimizeButton {
+      background-color: #333;
+      border: none;
+      color: #fff;
+      padding: 5px 10px;
+      border-radius: 50%;
+      cursor: pointer;
+      margin-left: 5px;
+    }
+    #minimizeButton:hover {
+      background-color: #555;
+    }
+
+    #searchInput:focus,
+    #searchButton:focus,
+    #minimizeButton:focus {
+      outline: none;
+    }
+    #searchInput::placeholder {
+      color: #777;
+    }
+
+    /********************************************************
+     * Chat container above the input bar
+     ********************************************************/
+    #chatContainer {
+      position: absolute;
+      bottom: 70px; /* a bit above the input bar */
+      left: 50%;
+      transform: translateX(-50%);
+      width: 400px;
+      max-height: 40vh;
+      overflow-y: auto;
+      padding: 10px;
+      box-sizing: border-box;
+      z-index: 20;
+    }
+    /* Scrollbar styling for chat container */
+    #chatContainer::-webkit-scrollbar {
+      width: 8px;
+    }
+    #chatContainer::-webkit-scrollbar-track {
+      background: #f1f1f1;
+    }
+    #chatContainer::-webkit-scrollbar-thumb {
+      background: #888;
+      border-radius: 4px;
+    }
+    #chatContainer::-webkit-scrollbar-thumb:hover {
+      background: #555;
+    }
+
+    /* When minimized, show only a small bar */
+    #chatContainer.minimized {
+      max-height: 30px;
+      overflow: hidden;
+      padding-top: 0;
+      padding-bottom: 0;
+    }
+
+    /* Generic chat bubble styling */
+    .chat-message {
+      margin: 8px 0;
+      padding: 8px 12px;
+      border-radius: 16px;
+      max-width: 60%;
+      word-wrap: break-word;
+      clear: both; /* ensures each bubble is on its own line */
+    }
+    /* Left side bubble */
+    .chat-left {
+      background-color: #e0e0e0;
+      float: left;
+    }
+    /* Right side bubble */
+    .chat-right {
+      background-color: #cceeff;
+      float: right;
+    }
+  </style>
+
+  <!-- Load Plotly from CDN -->
+  <script src="https://cdn.plot.ly/plotly-3.0.1.min.js" charset="utf-8"></script>
+  <!-- Include the Viktor JS SDK -->
+  <script src="VIKTOR_JS_SDK"></script>
+</head>
+<body>
+  <div id="page-container">
+    <!-- 3D Plotly Scene at the top -->
+    <div id="plotly-div"></div>
+
+    <!-- Chat container (above input bar) -->
+    <div id="chatContainer"></div>
+
+    <!-- Input bar pinned at bottom-center -->
+    <div id="searchBarContainer">
+      <div id="searchBar">
+        <input type="text" id="searchInput" placeholder="Type your message here...">
+        <!-- Use an up arrow for the send button text -->
+        <button id="searchButton">&#x2191;</button>
+        <!-- Minimize button to the right of the send button -->
+        <button id="minimizeButton">&#x2212;</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /************************************************************
+     * 1) Decode the Plotly figure JSON (for 3D scene)
+     ************************************************************/
+    let plotlyJsonBase64 = "PLOTLY_JSON";
+    let plotlyJsonText = atob(plotlyJsonBase64);
+    let plotlyFig = JSON.parse(plotlyJsonText);
+
+    // Create the Plotly scene
+    Plotly.newPlot('plotly-div', plotlyFig.data, plotlyFig.layout, plotlyFig.config || {});
+
+    /************************************************************
+     * 2) Decode the initial messages array JSON
+     ************************************************************/
+    let messagesJsonBase64 = "MESSAGES_JSON";  // replaced by Python
+    let messagesJsonText = atob(messagesJsonBase64);
+    let messages = JSON.parse(messagesJsonText || "[]");
+
+    /************************************************************
+     * 3) Render messages as chat bubbles based on message type
+     ************************************************************/
+    function renderMessages() {
+      const container = document.getElementById('chatContainer');
+      // Clear existing content
+      container.innerHTML = "";
+
+      messages.forEach((msg, index) => {
+        let text = "";
+        let sideClass = "";
+
+        // Check if the message is an object and extract the proper content.
+        if (typeof msg === 'object' && msg !== null) {
+          if ("user" in msg) {
+            text = msg.user;
+            sideClass = "chat-right"; // User messages on the right.
+          } else if ("assistance" in msg) {
+            text = msg.assistance;
+            sideClass = "chat-left"; // Assistance messages on the left.
+          } else {
+            text = JSON.stringify(msg);
+            sideClass = (index % 2 === 0) ? "chat-left" : "chat-right";
+          }
+        } else {
+          text = msg;
+          sideClass = (index % 2 === 0) ? "chat-left" : "chat-right";
+        }
+
+        let bubble = document.createElement('div');
+        bubble.className = "chat-message " + sideClass;
+        bubble.textContent = text;
+        container.appendChild(bubble);
+      });
+
+      // Auto-scroll to the bottom.
+      container.scrollTop = container.scrollHeight;
+    }
+    renderMessages();
+
+    /************************************************************
+     * 4) Add new message on click or Enter key press
+     ************************************************************/
+    const searchButton = document.getElementById('searchButton');
+    const searchInput = document.getElementById('searchInput');
+    const chatContainer = document.getElementById('chatContainer');
+    const minimizeButton = document.getElementById('minimizeButton');
+
+    function addMessage() {
+      let newMessage = searchInput.value.trim();
+      if (!newMessage) return;
+
+      // Add new message as an object with key "user"
+      messages.push({ "user": newMessage });
+      renderMessages();
+      searchInput.value = "";
+
+      // Send the entire messages array back to the backend.
+      let messagesString = JSON.stringify(messages);
+      viktorSdk.sendParams({ "user_query": messagesString });
+    }
+
+    searchButton.addEventListener('click', addMessage);
+    searchInput.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        addMessage();
+      }
+    });
+
+    /************************************************************
+     * 5) Minimize chat container toggle
+     ************************************************************/
+    minimizeButton.addEventListener('click', function() {
+      chatContainer.classList.toggle('minimized');
+      // Toggle button text between plus and minus
+      if (chatContainer.classList.contains('minimized')) {
+        minimizeButton.textContent = '+';
+      } else {
+        minimizeButton.textContent = '−';
+      }
+    });
+  </script>
+</body>
+</html>

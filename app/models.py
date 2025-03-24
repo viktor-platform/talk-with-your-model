@@ -1,5 +1,5 @@
-
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from typing import TypedDict
 
 class Node(BaseModel):
     id: int
@@ -30,3 +30,24 @@ class Section(BaseModel):
 
 class AllSections(BaseModel):
     sections: list[Section]
+
+class InternalLoads(BaseModel):
+    output_case: str
+
+
+# Data Structure for the internal loads 
+UniqueName = str
+OutputCase = str
+Station = str
+
+# Define a TypedDict for a force entry.
+class ForceEntry(TypedDict):
+    P: float
+    V2: float
+    V3: float
+    T: float
+    M2: float
+    M3: float
+
+# Now, define the nested dictionary type using the aliases.
+CombForcesDict = dict[UniqueName, dict[OutputCase, dict[Station, list[ForceEntry]]]]
