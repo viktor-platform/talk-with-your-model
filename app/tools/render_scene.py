@@ -1,10 +1,10 @@
-from app.models import Node, Frame
 import plotly.graph_objects as go #type: ignore
-import plotly.express as px
 import numpy as np
 
+from app.models import Node, Frame
 
-def compute_beam_vertices(A, B, width=0.1):
+
+def compute_beam_vertices(A: np.ndarray, B: np.ndarray, width=0.1):
     """
     Compute the eight vertices of a rectangular beam (prism) between endpoints A and B.
     The beam has a square cross-section with side 'width'.
@@ -44,7 +44,7 @@ def compute_beam_vertices(A, B, width=0.1):
     vertices = np.array([v0, v1, v2, v3, v4, v5, v6, v7])
     return vertices
 
-def add_beam_mesh(fig, vertices, color="teal"):
+def add_beam_mesh(fig: go.Figure, vertices: np.ndarray, color: str ="teal") -> None:
     """
     Add a Mesh3d trace representing a beam (rectangular prism) to the figure.
     Lighting parameters have been added to improve the visibility of thin beams.
@@ -93,14 +93,12 @@ def add_beam_mesh(fig, vertices, color="teal"):
 
 def plot_3d_scene(nodes: dict[str, Node], lines: dict[str, Frame]) -> go.Figure:
     # Ensure each node is an instance of Node.
-    for node_id, node in nodes.items():
-        if not isinstance(node, Node):
-            nodes[node_id] = Node(**node)
+
     
     # Extract node coordinates.
-    x_values = [node.x for node in nodes.values()]
-    y_values = [node.y for node in nodes.values()]
-    z_values = [node.z for node in nodes.values()]
+    x_values = [node["x"] for node in nodes.values()]
+    y_values = [node["y"] for node in nodes.values()]
+    z_values = [node["z"] for node in nodes.values()]
     
     # Compute the min, max, and range for each axis.
     x_min, x_max = min(x_values), max(x_values)
@@ -132,7 +130,7 @@ def plot_3d_scene(nodes: dict[str, Node], lines: dict[str, Frame]) -> go.Figure:
         z=z_values,
         mode='markers',
         marker=dict(size=1, color='blue'),
-        text=[f"Node {node.id}" for node in nodes.values()],
+        text=[f"Node {node['id']}" for node in nodes.values()],
         hoverinfo='text'
     ))
     
@@ -141,8 +139,8 @@ def plot_3d_scene(nodes: dict[str, Node], lines: dict[str, Frame]) -> go.Figure:
         node1 = nodes[str(frame["nodeI"])]
         node2 = nodes[str(frame["nodeJ"])]
         
-        A = np.array([node1.x, node1.y, node1.z])
-        B = np.array([node2.x, node2.y, node2.z])
+        A = np.array([node1["x"], node1["y"], node1["z"]])
+        B = np.array([node2["x"], node2["y"], node2["z"]])
         
         vertices = compute_beam_vertices(A, B, width=300)
         add_beam_mesh(fig, vertices, color="teal")
@@ -186,14 +184,17 @@ def plot_3d_scene(nodes: dict[str, Node], lines: dict[str, Frame]) -> go.Figure:
             bgcolor='white'
         ),
         paper_bgcolor='white',
-        margin=dict(l=0, r=0, t=30, b=0)
+        autosize=True,
+
+        margin=dict(l=0, r=0, t=0, b=0)
     )
     
     # Remove fig.show() so that we can dump the complete figure as JSON.
     return fig
 
 
-def default_blank_scene():
+def default_blank_scene()->go.Figure:
+    """ Fallback scene when there is no Plotly objects to plot!"""
     fig = go.Figure()
     fig.update_layout(
         template=None,
@@ -201,6 +202,7 @@ def default_blank_scene():
         yaxis=dict(visible=False, showgrid=False, zeroline=False, showline=False),
         paper_bgcolor='white',
         plot_bgcolor='white',
-        margin=dict(l=0, r=0, t=0, b=0)
+        margin=dict(l=0, r=0, t=0, b=0),
+        autosize=True,
     )
     return fig

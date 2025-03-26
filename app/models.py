@@ -1,7 +1,7 @@
-from pydantic import BaseModel, Field
-from typing import TypedDict
+from pydantic import BaseModel
+from typing import TypedDict, NamedTuple, Any
 
-class Node(BaseModel):
+class Node(TypedDict):
     id: int
     x: float
     y: float
@@ -17,7 +17,7 @@ class AllGroups(BaseModel):
     groups: list[Group]
 
 
-class Frame(BaseModel):
+class Frame(TypedDict):
     id: int
     nodeI: int
     nodeJ: int
@@ -36,7 +36,7 @@ class InternalLoads(BaseModel):
 
 
 # Data Structure for the internal loads 
-UniqueName = str
+UniqueName = int
 OutputCase = str
 Station = str
 
@@ -49,5 +49,22 @@ class ForceEntry(TypedDict):
     M2: float
     M3: float
 
-# Now, define the nested dictionary type using the aliases.
 CombForcesDict = dict[UniqueName, dict[OutputCase, dict[Station, list[ForceEntry]]]]
+
+# Type dict for the displacements
+class DispEntry(TypedDict):
+    Ux: float
+    Uy: float
+    Uz: float
+
+JoinDispDict = dict[UniqueName, dict[OutputCase, list[DispEntry]]]
+
+# Name tupled for entities 
+class Entities(NamedTuple):
+    nodes: dict[str, Node]
+    frames: dict[str, Frame]
+    sections: dict[str, dict]
+    internal_loads: CombForcesDict
+    joints_disp: JoinDispDict
+    list_load_combos: list[str]
+    reactions_payloads: list[dict[str, Any]]

@@ -1,5 +1,6 @@
 from app.tools.render_scene import compute_beam_vertices, add_beam_mesh
-from app.models import Node, ForceEntry
+from app.models import Node, ForceEntry, Frame
+from typing import Literal
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
 import plotly.graph_objects as go  # type: ignore
@@ -20,6 +21,10 @@ def aggregate_force_entries(
     For each force component, select the value (with its original sign)
     that has the maximum absolute magnitude from the two lists.
     """
+    ForceKey = Literal["P", "V2", "V3", "T", "M2", "M3"]
+
+    KEYS: tuple[ForceKey, ...] = ("P", "V2", "V3", "T", "M2", "M3")
+
     result: ForceEntry = {
         "P": 0.0,
         "V2": 0.0,
@@ -28,31 +33,26 @@ def aggregate_force_entries(
         "M2": 0.0,
         "M3": 0.0,
     }
-    for key in result.keys():
-        # Combine the force entries for the current key from both lists.
+    for key in KEYS:
         candidates = [entry[key] for entry in force_list_a] + [
             entry[key] for entry in force_list_b
         ]
-        if candidates:
-            # Select the value with the maximum absolute magnitude.
-            best = max(candidates, key=abs)
-            result[key] = best
-        else:
-            result[key] = 0.0
+        result[key] = max(candidates, key=abs) if candidates else 0.0
     return result
 
 
 def generater_station_point(
-    nodes: dict[str, dict],
-    lines: dict[str, dict],
+    nodes: dict[str, Node],
+    lines: dict[str, Frame],
     comb_forces: dict[int, dict[str, dict]],
-) -> tuple[dict[str, dict], dict[str, dict], dict[str, dict]]:
+) -> tuple[dict[str, Node], dict[str, Frame], dict[str, dict]]:
     """
     Discretize each line by creating new inner nodes based on station values and aggregate force entries.
     Original comb_forces has the structure:
       dict[UniqueName, dict[OutputCase, dict[Station, list[ForceEntry]]]]
     The updated comb_forces (new_comb_forces) will have the structure:
       dict[UniqueName, dict[OutputCase, list[ForceEntry]]]
+      comb_forces =! CombForcesDict (the first doesn't have stations keys)
     """
     # Determine current maximum node and line IDs.
     max_node_id = max(int(nid) for nid in nodes.keys())
@@ -127,13 +127,13 @@ def generater_station_point(
         ] = {}  
         for idx in range(1, len(sorted_station_keys) - 1):
             station_val = sorted_station_values[idx]
-            station_dist_mm = station_val * 1000
+            station_dist_mm = station_val 
             new_x = node_i_coords["x"] + station_dist_mm * unit_dx
             new_y = node_i_coords["y"] + station_dist_mm * unit_dy
             new_z = node_i_coords["z"] + station_dist_mm * unit_dz
             max_node_id += 1
             new_node_id = max_node_id
-            nodes[str(new_node_id)] = {"x": new_x, "y": new_y, "z": new_z}
+            nodes[str(new_node_id)] = {"id":new_node_id ,"x": new_x, "y": new_y, "z": new_z}
             new_node_ids[idx] = new_node_id
 
         # Create new segments. For segment i (0 <= i < len(sorted_station_keys)-1):
@@ -150,7 +150,7 @@ def generater_station_point(
 
             max_line_id += 1
             new_line_id = str(max_line_id)
-            lines[new_line_id] = {"nodeI": start_node, "nodeJ": end_node}
+            lines[new_line_id] = {"id":int(new_line_id),"nodeI": start_node, "nodeJ": end_node}
 
             # For each load case, assign the aggregated force entry corresponding to segment i.
             new_comb_forces[new_line_id] = {}
@@ -163,25 +163,18 @@ def generater_station_point(
 
 def plot_3d_scene_with_forces(
     nodes: dict[str, Node],
-    lines: dict[str, dict],
+    lines: dict[str, Frame],
     forces: dict[str, dict],
     load_case: str,
     force_component: str,
 ) -> go.Figure:
     """
+    Plot the expanded forces in the output station points
     """
-    # Ensure each node is a Node instance.
-    for node_id, node in nodes.items():
-        if not isinstance(node, Node):
-            node_data = dict(node)
-            if "id" in node_data:
-                del node_data["id"]
-            nodes[node_id] = Node(id=node_id, **node_data)
-
     # Extract node coordinates.
-    x_values = [node.x for node in nodes.values()]
-    y_values = [node.y for node in nodes.values()]
-    z_values = [node.z for node in nodes.values()]
+    x_values = [node["x"] for node in nodes.values()]
+    y_values = [node["y"] for node in nodes.values()]
+    z_values = [node["z"] for node in nodes.values()]
 
     # Compute the min, max, and range for each axis.
     x_min, x_max = min(x_values), max(x_values)
@@ -213,7 +206,7 @@ def plot_3d_scene_with_forces(
             z=z_values,
             mode="markers",
             marker=dict(size=3, color="blue"),
-            text=[f"Node {node.id}" for node in nodes.values()],
+            text=[f"Node {node['id']}" for node in nodes.values()],
             hoverinfo="text",
             showlegend=False,
         )
@@ -245,8 +238,8 @@ def plot_3d_scene_with_forces(
         node1 = nodes[str(frame["nodeI"])]
         node2 = nodes[str(frame["nodeJ"])]
 
-        A = np.array([node1.x, node1.y, node1.z])
-        B = np.array([node2.x, node2.y, node2.z])
+        A = np.array([node1["x"], node1["y"], node1["z"]])
+        B = np.array([node2["x"], node2["y"], node2["z"]])
 
         # Determine the force value and map it to a color.
         force_val = force_values.get(line_id, 0.0)
@@ -269,7 +262,7 @@ def plot_3d_scene_with_forces(
                 color=[min_force, max_force],
                 colorscale="jet",
                 colorbar=dict(
-                    title=force_component,
+                    title=f"{force_component} [kN]",
                 ),
                 size=0,
                 opacity=0,
