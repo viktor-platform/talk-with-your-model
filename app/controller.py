@@ -10,15 +10,21 @@ from app.tools.render_scene import default_blank_scene
 from app.llm_engine import llm_response, execute_tool
 from app.tools.render_scene import plot_3d_scene
 from app.parse_xlsx import get_entities
-from app.models import  Entities
-vkt
+from app.models import Entities
 
-def read_file_binary(xlsx_file: vkt.File) -> Entities:
+import logging
+import sys
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, stream=sys.stdout)
+
+
+def read_file_binary(file) -> Entities:
     """Memoized wrapper for processing the input .xlsx file.
     Returns:
         nodes_dict, frame_dicts, section_dicts, comb_forces_dict, joint_disp_dict, list_load_combs
     See app.models for data structure definitions.
     """
+    xlsx_file = file.file
     file_content = xlsx_file.getvalue_binary()
     return Entities(*get_entities(file_content=file_content))
 
@@ -50,10 +56,12 @@ class Controller(vkt.Controller):
         payload: None | Entities = None
         if params.xlsx_file:
             # Parse entities from the Excel
-            entities = read_file_binary(params.xlsx_file.file)
+            entities = read_file_binary(params.xlsx_file)
             payload = entities
             # Create a 3D scene for fig1
-            fig1 = plot_3d_scene(entities.nodes, entities.frames)
+            if isinstance(payload, list):
+                payload = Entities(*payload)
+            fig1 = plot_3d_scene(payload.nodes, payload.frames)
 
         # Process chat messages
         if params.user_query:
@@ -65,8 +73,10 @@ class Controller(vkt.Controller):
                     if isinstance(last_message, dict) and "user" in last_message:
                         user_text = last_message["user"]
                         if payload:
-                            # We have an uploaded file and a user query
-                            response = llm_response(user_text, ctx=entities.list_load_combos)
+                            # Memoize converts entities to list!
+                            if isinstance(payload, list):
+                                payload = Entities(*payload)
+                            response = llm_response(user_text, ctx=payload.list_load_combos)
                             parsed_response = response.choices[0].message.parsed
                             if parsed_response:
                                 # This might return a text response and a figure
