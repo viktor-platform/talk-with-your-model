@@ -2,11 +2,8 @@ import plotly.graph_objects  as go #type: ignore
 from typing import Any
 
 def plot_reaction(merged_data: list[dict[str, Any]], load_case: str) -> go.Figure:
-    print(f"{load_case=}")
-
     # Filter data based on load_case
     filtered_data = [row for row in merged_data if row.get("Output Case") == load_case]
-    print(filtered_data)
     if not filtered_data:
         raise ValueError(f"No data found for load case {load_case}")
 

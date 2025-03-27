@@ -1,10 +1,10 @@
 import plotly.graph_objects as go #type: ignore
 import numpy as np
-
+from numpy.typing import NDArray
 from app.models import Node, Frame
 
 
-def compute_beam_vertices(A: np.ndarray, B: np.ndarray, width=0.1):
+def compute_beam_vertices(A: NDArray[np.float64], B: NDArray[np.float64], width: float = 0.1) -> NDArray[np.float64]:
     """
     Compute the eight vertices of a rectangular beam (prism) between endpoints A and B.
     The beam has a square cross-section with side 'width'.
@@ -44,7 +44,7 @@ def compute_beam_vertices(A: np.ndarray, B: np.ndarray, width=0.1):
     vertices = np.array([v0, v1, v2, v3, v4, v5, v6, v7])
     return vertices
 
-def add_beam_mesh(fig: go.Figure, vertices: np.ndarray, color: str ="teal") -> None:
+def add_beam_mesh(fig: go.Figure, vertices: NDArray[np.float64], color: str ="teal") -> None:
     """
     Add a Mesh3d trace representing a beam (rectangular prism) to the figure.
     Lighting parameters have been added to improve the visibility of thin beams.
@@ -92,10 +92,8 @@ def add_beam_mesh(fig: go.Figure, vertices: np.ndarray, color: str ="teal") -> N
     fig.add_trace(beam_trace)
 
 def plot_3d_scene(nodes: dict[str, Node], lines: dict[str, Frame]) -> go.Figure:
+    """Plot ETABS 3D model using rectangular cross sections"""
     # Ensure each node is an instance of Node.
-
-    
-    # Extract node coordinates.
     x_values = [node["x"] for node in nodes.values()]
     y_values = [node["y"] for node in nodes.values()]
     z_values = [node["z"] for node in nodes.values()]
@@ -188,13 +186,11 @@ def plot_3d_scene(nodes: dict[str, Node], lines: dict[str, Frame]) -> go.Figure:
 
         margin=dict(l=0, r=0, t=0, b=0)
     )
-    
-    # Remove fig.show() so that we can dump the complete figure as JSON.
     return fig
 
 
 def default_blank_scene()->go.Figure:
-    """ Fallback scene when there is no Plotly objects to plot!"""
+    """Fallback scene when there is no Plotly objects to plot!"""
     fig = go.Figure()
     fig.update_layout(
         template=None,

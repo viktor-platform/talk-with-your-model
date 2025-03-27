@@ -1,5 +1,5 @@
 from app.tools.render_scene import compute_beam_vertices, add_beam_mesh
-from app.models import Node, ForceEntry, Frame
+from app.models import Node, ForceEntry, Frame, CombForcesDict
 from typing import Literal
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
@@ -44,7 +44,7 @@ def aggregate_force_entries(
 def generater_station_point(
     nodes: dict[str, Node],
     lines: dict[str, Frame],
-    comb_forces: dict[int, dict[str, dict]],
+    comb_forces: CombForcesDict,
 ) -> tuple[dict[str, Node], dict[str, Frame], dict[str, dict]]:
     """
     Discretize each line by creating new inner nodes based on station values and aggregate force entries.

@@ -11,36 +11,35 @@ from app.llm_engine import llm_response, execute_tool
 from app.tools.render_scene import plot_3d_scene
 from app.parse_xlsx import get_entities
 from app.models import  Entities
+vkt
 
-
-def read_file_binary(file) -> Entities:
+def read_file_binary(xlsx_file: vkt.File) -> Entities:
     """Memoized wrapper for processing the input .xlsx file.
     Returns:
         nodes_dict, frame_dicts, section_dicts, comb_forces_dict, joint_disp_dict, list_load_combs
     See app.models for data structure definitions.
     """
-    xlsx_file = file.file
     file_content = xlsx_file.getvalue_binary()
     return Entities(*get_entities(file_content=file_content))
 
 
 class Parametrization(vkt.Parametrization):
     upload_text = vkt.Text(
-        dedent(
-            """# **Upload Your ETABS Model**\n
-            Export your model's results in `.xlsx` format from ETABS,\n
-            click on the file loader below, and upload the `.xlsx` file."""
-        )
+        dedent("""\
+        # Talk With Your ETABS Model
+        Export your model's results in `.xlsx` format from ETABS,
+        click on the file loader below, and upload the `.xlsx` file.
+        """)
     )
     xlsx_file = vkt.FileField("**Upload a .xlsx file:**", flex=50)
     user_query = vkt.HiddenField(name="user_query", ui_name="user_query") 
 
 
 class Controller(vkt.Controller):
-    parametrization = Parametrization(width=20)
+    parametrization = Parametrization(width=25)
 
     @vkt.WebView("Web View")
-    def app_view(self, params, **kwargs):
+    def app_view(self, params, **kwargs)-> vkt.WebResult:
         # Default messages array
         messages = []
         # FIGURE 1: default black or blank scene
@@ -51,7 +50,7 @@ class Controller(vkt.Controller):
         payload: None | Entities = None
         if params.xlsx_file:
             # Parse entities from the Excel
-            entities = read_file_binary(params.xlsx_file)
+            entities = read_file_binary(params.xlsx_file.file)
             payload = entities
             # Create a 3D scene for fig1
             fig1 = plot_3d_scene(entities.nodes, entities.frames)
@@ -69,22 +68,29 @@ class Controller(vkt.Controller):
                             # We have an uploaded file and a user query
                             response = llm_response(user_text, ctx=entities.list_load_combos)
                             parsed_response = response.choices[0].message.parsed
-                            # This might return a text response and a figure
-                            llm_message, generated_fig = execute_tool(
-                                response=parsed_response,
-                                entities=payload
-                            )
-                            # Use the generated figure for fig2
-                            if generated_fig is not None:
-                                fig2 = generated_fig
+                            if parsed_response:
+                                # This might return a text response and a figure
+                                llm_message, generated_fig = execute_tool(
+                                    response=parsed_response,
+                                    entities=payload
+                                )
+                                # Use the generated figure for fig2
+                                if generated_fig is not None:
+                                    fig2 = generated_fig
 
-                            # Append the LLM response to messages
-                            messages.append({"assistance": llm_message})
+                                # Append the LLM response to messages
+                                messages.append({"assistance": llm_message})
+                            else:
+                                raise ValueError("The LLM returned no parsed response.")
                         else:
                             # No file is uploaded
                             response = llm_response(user_text, ctx="No model uploaded!")
                             parsed_response = response.choices[0].message.parsed
-                            messages.append({"assistance": parsed_response.response})
+                            if parsed_response:
+                                messages.append({"assistance": parsed_response.response})
+                            else:
+                                raise ValueError("The LLM returned no parsed response.")
+
 
             except Exception as e:
                 print(f"Error processing user query: {e}")

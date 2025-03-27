@@ -3,7 +3,6 @@ import time
 import pandas as pd  # type: ignore
 
 from typing import IO, Any
-from functools import cache
 from functools import wraps
 from app.models import (
     Node,
@@ -225,12 +224,6 @@ def get_displacements(sheets_data: dict[str, pd.DataFrame]) -> JoinDispDict:
 
     return joint_disp_dict
 
-
-@timer
-def get_section_by_id(sections, section_id):
-    for section_name, section_vals in sections.items():
-        if section_id in section_vals["frame_ids"]:
-            return section_name
 
 
 @timer
