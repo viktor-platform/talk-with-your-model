@@ -13,7 +13,6 @@
       background-color: #fff;
       font-family: sans-serif;
     }
-
     /* Bento-style responsive grid container */
     #grid-container {
       display: grid;
@@ -21,20 +20,20 @@
       grid-template-rows: 1fr 1fr;
       gap: 15px;
       padding: 25px;
-      height: 90vh;               /* Increased from 70% to 85vh */
-      width: 70vw;                /* Increased from 70% to 85vw */
-      margin: auto;               /* Centers the container */
+      height: 90vh;
+      width: 70vw;
+      margin: auto;
       box-sizing: border-box;
     }
     /* Styling for Plotly canvases */
     #plotly-div-1, #plotly-div-2 {
-    border: 1px solid #ddd;
-    padding: 0; /* top, right, bottom, left */
-    box-sizing: border-box;
-    background-color: #fff;
-    border-radius: 8px;
-    overflow: hidden;
-}
+      border: 1px solid #ddd;
+      padding: 0;
+      box-sizing: border-box;
+      background-color: #fff;
+      border-radius: 8px;
+      overflow: hidden;
+    }
     /* Chat section styling spanning both rows in second column */
     #chat-section {
       grid-row: 1 / span 2;
@@ -46,7 +45,6 @@
       background-color: #fff;
       box-sizing: border-box;
     }
-
     /* Chat container (message area) styling */
     #chatContainer {
       flex: 1;
@@ -54,14 +52,12 @@
       padding: 15px;
       box-sizing: border-box;
     }
-
     /* Search bar container with a subtle top border */
     #searchBarContainer {
       padding: 15px;
       box-sizing: border-box;
       border-top: 1px solid #eee;
     }
-
     /* Chat bubble styling */
     .chat-message {
       margin: 8px 0;
@@ -79,7 +75,6 @@
       background-color: #e0f7fa;
       float: right;
     }
-
     /* Search bar styling */
     #searchBar {
       background-color: #fff;
@@ -117,7 +112,6 @@
     #minimizeButton:focus {
       outline: none;
     }
-
     /* Minimized chat container style */
     #chatContainer.minimized {
       max-height: 30px;
@@ -125,7 +119,6 @@
       padding-top: 0;
       padding-bottom: 0;
     }
-
     /* Responsive layout for smaller screens */
     @media (max-width: 768px) {
       #grid-container {
@@ -138,7 +131,6 @@
       }
     }
   </style>
-
   <!-- Load Plotly from CDN -->
   <script src="https://cdn.plot.ly/plotly-3.0.1.min.js" charset="utf-8"></script>
   <!-- Include the Viktor JS SDK -->
@@ -176,10 +168,10 @@
     let plotlyJsonBase64_2 = "PLOTLY_JSON_SCENE_2";
     let plotlyJsonText_2 = atob(plotlyJsonBase64_2);
     let plotlyFig2 = JSON.parse(plotlyJsonText_2);
-    Plotly.newPlot('plotly-div-2', plotlyFig2.data, plotlyFig2.layout, plotlyFig2.config ||{responsive: true});
+    Plotly.newPlot('plotly-div-2', plotlyFig2.data, plotlyFig2.layout, plotlyFig2.config || {responsive: true});
 
     /************************************************************
-     * Render chat messages as bubbles
+     * Render chat messages as bubbles using "role" and "content"
      ************************************************************/
     let messagesJsonBase64 = "MESSAGES_JSON";
     let messagesJsonText = atob(messagesJsonBase64);
@@ -188,33 +180,14 @@
     function renderMessages() {
       const container = document.getElementById('chatContainer');
       container.innerHTML = "";
-
-      messages.forEach((msg, index) => {
-        let text = "";
-        let sideClass = "";
-
-        if (typeof msg === 'object' && msg !== null) {
-          if ("user" in msg) {
-            text = msg.user;
-            sideClass = "chat-right";
-          } else if ("assistance" in msg) {
-            text = msg.assistance;
-            sideClass = "chat-left";
-          } else {
-            text = JSON.stringify(msg);
-            sideClass = (index % 2 === 0) ? "chat-left" : "chat-right";
-          }
-        } else {
-          text = msg;
-          sideClass = (index % 2 === 0) ? "chat-left" : "chat-right";
-        }
-
+      messages.forEach(msg => {
+        let text = msg.content;
+        let sideClass = (msg.role === "assistant") ? "chat-left" : "chat-right";
         let bubble = document.createElement('div');
         bubble.className = "chat-message " + sideClass;
         bubble.textContent = text;
         container.appendChild(bubble);
       });
-
       container.scrollTop = container.scrollHeight;
     }
     renderMessages();
@@ -230,13 +203,13 @@
     function addMessage() {
       let newMessage = searchInput.value.trim();
       if (!newMessage) return;
-
-      messages.push({ "user": newMessage });
+      // Create a new message in the required format
+      messages.push({ "role": "user", "content": newMessage });
       renderMessages();
       searchInput.value = "";
-
       let messagesString = JSON.stringify(messages);
-      viktorSdk.sendParams({ "user_query": messagesString });
+      // Send the complete conversation history to the back end
+      viktorSdk.sendParams({ "conversation_history": messagesString });
     }
 
     searchButton.addEventListener('click', addMessage);
@@ -256,13 +229,8 @@
      ************************************************************/
     minimizeButton.addEventListener('click', function() {
       chatContainer.classList.toggle('minimized');
-      if (chatContainer.classList.contains('minimized')) {
-        minimizeButton.textContent = '+';
-      } else {
-        minimizeButton.textContent = '−';
-      }
+      minimizeButton.textContent = chatContainer.classList.contains('minimized') ? '+' : '−';
     });
   </script>
 </body>
 </html>
-  

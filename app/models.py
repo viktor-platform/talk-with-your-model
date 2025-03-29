@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import TypedDict, NamedTuple, Any
+from typing import TypedDict, NamedTuple, Any, Callable, TypeVar, Literal
 
 class Node(TypedDict):
     id: int
@@ -36,7 +36,7 @@ class InternalLoads(BaseModel):
 
 
 # Data Structure for the internal loads 
-UniqueName = int
+UniqueName = str
 OutputCase = str
 Station = str
 
@@ -68,3 +68,23 @@ class Entities(NamedTuple):
     joints_disp: JoinDispDict
     list_load_combos: list[str]
     reactions_payloads: list[dict[str, Any]]
+
+# For memoize -> convert list to tupples
+T = TypeVar('T')
+def memoize_corrector(entity: Callable[..., T]) -> Callable[[Callable[..., Any]], Callable[..., T]]:
+    def decorator(fun: Callable[..., Any]) -> Callable[..., T]:
+        def wrapped(*args, **kwargs) -> T:
+            out = fun(*args, **kwargs)
+            if isinstance(out, list):
+                out = entity(*out)
+            return out
+        return wrapped
+    return decorator
+
+# Messge Model
+class Messages(BaseModel):
+    messages: list["Message"]
+
+class Message(BaseModel):
+    role: Literal["system", "user", "assistant"] 
+    content: str

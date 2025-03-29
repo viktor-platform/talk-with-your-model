@@ -82,6 +82,7 @@ def get_internal_loads(sheets_data: dict[str, pd.DataFrame]) -> CombForcesDict:
     # Group the DataFrame by 'Unique Name', 'Output Case', and 'Joint'
     grouped = df_combination.groupby(["Unique Name", "Output Case", "Station"])
     for (unique_name, output_case, station), group in grouped:
+        unique_name = str(int(unique_name))
         if unique_name not in comb_forces_dict:
             comb_forces_dict[unique_name] = {}
         if output_case not in comb_forces_dict[unique_name]:
@@ -204,6 +205,8 @@ def get_displacements(sheets_data: dict[str, pd.DataFrame]) -> JoinDispDict:
     # Data structure to stored displacement.
     joint_disp_dict: JoinDispDict = {}
     for (unique_name, output_case), group in grouped:
+        # Due memoize this need to be converted first to int then to str!
+        unique_name = str(int(unique_name))
         # Populate keys as nodes ids and create empty dict.
         if unique_name not in joint_disp_dict:
             joint_disp_dict[unique_name] = {}

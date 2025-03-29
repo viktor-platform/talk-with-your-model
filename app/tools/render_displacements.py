@@ -34,7 +34,8 @@ def plot_3d_disp_scene(
         raw_dx = raw_dy = raw_dz = 0.0
         # Look up displacement from disp dictionary using integer node id.
         try:
-            node_disp = disp.get(int(node_id), {}).get(output_case, [])
+            node_disp = disp.get(node_id, {}).get(output_case, [])
+            logger.info(f"{node_disp=},{type(node_disp)}")
         except ValueError:
             node_disp = []
         if node_disp and len(node_disp) > 0:

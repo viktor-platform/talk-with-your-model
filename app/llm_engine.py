@@ -83,7 +83,7 @@ class PadFoundationDesignForLoadCase(Tool):
     soil_pressure: float = Field(
         ...,
         description = dedent("""Soil Pressure value, the user need to provide this values in kN/m2,
-        remind the user about the units when using this tool!""")
+        remind the user about the units when using this tool!, use default 100kPa""")
     )
 
 class PadFoundationDesignForLoadEnvelope(Tool):
@@ -91,7 +91,7 @@ class PadFoundationDesignForLoadEnvelope(Tool):
     soil_pressure: float = Field(
         ...,
         description = dedent("""Soil Pressure value, the user need to provide this values in kN/m2,
-        remind the user about the units when using this tool!""")
+        remind the user about the units when using this tool!, use 100kPa as default""")
     )    
 
 class Response(BaseModel):
@@ -101,24 +101,24 @@ class Response(BaseModel):
     ) = Field(..., description="Select any of these tools, otherwise return None")
 
 
-def llm_response(question: str, ctx: Any) -> ParsedChatCompletion[Response]:
+def llm_response(ctx: Any, conversation_history: list[dict]) -> ParsedChatCompletion[Response]:
+    messages = []
+    # Default system prompt is always first
+    system_message = {
+        "role": "system",
+        "content": dedent(
+            f"""You are a helpful assistant with the following context, who formats your responses nicely and helps answer questions about a structural model. Respond by describing the functionality of the tools you have without mentioning their names explicitly. If the context is empty, ask the user to upload an XLSX file of their ETABS model. These are the load cases/combinations from the model: {ctx}."""
+        )
+    }
+    messages.append(system_message)
+    # Append the conversation history as provided by the front end
+    messages.extend(conversation_history)
+    
     return client.beta.chat.completions.parse(
         model="gpt-4o",
-        messages=[
-            {
-                "role": "system",
-                "content": dedent(f"""You are a helpful assistant with the following context, who 
-                formats your responses nicely and helps answer questions about a structural 
-                model. Respond by describing the functionality of the tools you have without 
-                mentioning their names explicitly, in a conversational manner. If the context is 
-                empty, ask the user to upload an XLSX file of their ETABS model. These are the 
-                load cases/combinations from the model: {ctx}."""),
-            },
-            {"role": "user", "content": f"Answer this question: {question}"},
-        ],
+        messages=messages,
         response_format=Response,
     )
-
 
 def execute_tool(response: Response, entities: Entities) -> tuple[str, go.Figure | None]:
     """Exectue the tools based on the user query and file_content. Generates a text response

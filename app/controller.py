@@ -10,14 +10,11 @@ from app.tools.render_scene import default_blank_scene
 from app.llm_engine import llm_response, execute_tool
 from app.tools.render_scene import plot_3d_scene
 from app.parse_xlsx import get_entities
-from app.models import Entities
-
-import logging
-import sys
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, stream=sys.stdout)
+from app.models import Entities, memoize_corrector
 
 
+@memoize_corrector(Entities)
+@vkt.memoize
 def read_file_binary(file) -> Entities:
     """Memoized wrapper for processing the input .xlsx file.
     Returns:
@@ -38,7 +35,7 @@ class Parametrization(vkt.Parametrization):
         """)
     )
     xlsx_file = vkt.FileField("**Upload a .xlsx file:**", flex=50)
-    user_query = vkt.HiddenField(name="user_query", ui_name="user_query") 
+    conversation_history = vkt.HiddenField(name="conversation_history", ui_name="conversation_history") 
 
 
 class Controller(vkt.Controller):
@@ -59,24 +56,19 @@ class Controller(vkt.Controller):
             entities = read_file_binary(params.xlsx_file)
             payload = entities
             # Create a 3D scene for fig1
-            if isinstance(payload, list):
-                payload = Entities(*payload)
             fig1 = plot_3d_scene(payload.nodes, payload.frames)
 
         # Process chat messages
-        if params.user_query:
+        if params.conversation_history:
             try:
-                messages = json.loads(params.user_query)
-                if messages:
-                    last_message = messages[-1]
-                    # If the last message is from the user
-                    if isinstance(last_message, dict) and "user" in last_message:
-                        user_text = last_message["user"]
+                conversation_history = json.loads(params.conversation_history)
+                if conversation_history and conversation_history[-1]["role"] == "user":
                         if payload:
                             # Memoize converts entities to list!
-                            if isinstance(payload, list):
-                                payload = Entities(*payload)
-                            response = llm_response(user_text, ctx=payload.list_load_combos)
+                            response = llm_response(
+                                ctx=payload.list_load_combos,
+                                conversation_history=conversation_history
+                            )
                             parsed_response = response.choices[0].message.parsed
                             if parsed_response:
                                 # This might return a text response and a figure
@@ -89,19 +81,22 @@ class Controller(vkt.Controller):
                                     fig2 = generated_fig
 
                                 # Append the LLM response to messages
-                                messages.append({"assistance": llm_message})
+                                conversation_history.append({"role": "assistant", "content": llm_message})
                             else:
                                 raise ValueError("The LLM returned no parsed response.")
                         else:
                             # No file is uploaded
-                            response = llm_response(user_text, ctx="No model uploaded!")
+                            response = llm_response(
+                                conversation_history=conversation_history,
+                                ctx="No model uploaded!",
+                            )
                             parsed_response = response.choices[0].message.parsed
                             if parsed_response:
-                                messages.append({"assistance": parsed_response.response})
+                                conversation_history.append({"role": "assistant", "content": parsed_response.response})
                             else:
                                 raise ValueError("The LLM returned no parsed response.")
 
-
+                messages = conversation_history
             except Exception as e:
                 print(f"Error processing user query: {e}")
 

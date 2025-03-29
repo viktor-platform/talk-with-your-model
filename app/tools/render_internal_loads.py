@@ -90,11 +90,11 @@ def generater_station_point(
 
 
         # Check if this line exists in comb_forces.
-        if int(line_id) not in comb_forces:
+        if line_id not in comb_forces:
             logging.warning(f"Line {line_id} not found in comb_forces. Skipping.")
             continue
-
-        station_dict = comb_forces[int(line_id)][first_load_case]
+        logger.info(f"{type(line_id)=}")
+        station_dict = comb_forces[line_id][first_load_case]
         # Get station keys sorted by their numeric value.
         station_keys = list(station_dict.keys())
         sorted_station_keys = sorted(station_keys, key=lambda s: float(s))
@@ -109,7 +109,7 @@ def generater_station_point(
 
         # For each load case, compute an aggregated ForceEntry for each segment defined by adjacent stations.
         aggregated_forces_by_load: dict[str, list[ForceEntry]] = {}
-        for load_case, station_data in comb_forces[int(line_id)].items():
+        for load_case, station_data in comb_forces[line_id].items():
             seg_forces = []
             for i in range(len(sorted_station_keys) - 1):
                 # Use the original sorted keys (as strings) to index the dictionary.
