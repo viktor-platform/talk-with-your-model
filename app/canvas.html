@@ -85,17 +85,22 @@
       align-items: center;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     }
+    /* Changed input to textarea for multi-line support */
     #searchInput {
       border: none;
       margin-left: 10px;
       flex-grow: 1;
       background-color: transparent;
       color: #333;
+      overflow: hidden;
+      resize: none;
+      font-family: inherit;
+      font-size: 1rem;
     }
     #searchInput::placeholder {
       color: #aaa;
     }
-    #searchButton, #minimizeButton {
+    #searchButton {
       background-color: #333;
       border: none;
       color: #fff;
@@ -104,20 +109,12 @@
       cursor: pointer;
       margin-left: 5px;
     }
-    #searchButton:hover, #minimizeButton:hover {
+    #searchButton:hover {
       background-color: #555;
     }
     #searchInput:focus,
-    #searchButton:focus,
-    #minimizeButton:focus {
+    #searchButton:focus {
       outline: none;
-    }
-    /* Minimized chat container style */
-    #chatContainer.minimized {
-      max-height: 30px;
-      overflow: hidden;
-      padding-top: 0;
-      padding-bottom: 0;
     }
     /* Responsive layout for smaller screens */
     @media (max-width: 768px) {
@@ -133,6 +130,8 @@
   </style>
   <!-- Load Plotly from CDN -->
   <script src="https://cdn.plot.ly/plotly-3.0.1.min.js" charset="utf-8"></script>
+  <!-- Load Marked library for Markdown rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <!-- Include the Viktor JS SDK -->
   <script src="VIKTOR_JS_SDK"></script>
 </head>
@@ -146,9 +145,8 @@
       <div id="chatContainer"></div>
       <div id="searchBarContainer">
         <div id="searchBar">
-          <input type="text" id="searchInput" placeholder="Type your message here...">
+          <textarea id="searchInput" placeholder="Type your message here..." rows="1"></textarea>
           <button id="searchButton">&#x2191;</button>
-          <button id="minimizeButton">&#x2212;</button>
         </div>
       </div>
     </div>
@@ -172,6 +170,7 @@
 
     /************************************************************
      * Render chat messages as bubbles using "role" and "content"
+     * Render message content as Markdown
      ************************************************************/
     let messagesJsonBase64 = "MESSAGES_JSON";
     let messagesJsonText = atob(messagesJsonBase64);
@@ -185,7 +184,7 @@
         let sideClass = (msg.role === "assistant") ? "chat-left" : "chat-right";
         let bubble = document.createElement('div');
         bubble.className = "chat-message " + sideClass;
-        bubble.textContent = text;
+        bubble.innerHTML = marked.parse(text);
         container.appendChild(bubble);
       });
       container.scrollTop = container.scrollHeight;
@@ -193,12 +192,19 @@
     renderMessages();
 
     /************************************************************
+     * Auto-resize the textarea when input is entered
+     ************************************************************/
+    const searchInput = document.getElementById('searchInput');
+    searchInput.addEventListener('input', function() {
+      this.style.height = 'auto';
+      this.style.height = this.scrollHeight + 'px';
+    });
+
+    /************************************************************
      * Add new message on click or Enter key press
      ************************************************************/
     const searchButton = document.getElementById('searchButton');
-    const searchInput = document.getElementById('searchInput');
     const chatContainer = document.getElementById('chatContainer');
-    const minimizeButton = document.getElementById('minimizeButton');
 
     function addMessage() {
       let newMessage = searchInput.value.trim();
@@ -207,6 +213,7 @@
       messages.push({ "role": "user", "content": newMessage });
       renderMessages();
       searchInput.value = "";
+      searchInput.style.height = 'auto'; // reset height after submission
       let messagesString = JSON.stringify(messages);
       // Send the complete conversation history to the back end
       viktorSdk.sendParams({ "conversation_history": messagesString });
@@ -214,7 +221,8 @@
 
     searchButton.addEventListener('click', addMessage);
     searchInput.addEventListener('keypress', function(e) {
-      if (e.key === 'Enter') {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
         addMessage();
       }
     });
@@ -222,14 +230,6 @@
     window.addEventListener('resize', () => {
       Plotly.Plots.resize('plotly-div-1');
       Plotly.Plots.resize('plotly-div-2');
-    });
-
-    /************************************************************
-     * Toggle minimize chat container
-     ************************************************************/
-    minimizeButton.addEventListener('click', function() {
-      chatContainer.classList.toggle('minimized');
-      minimizeButton.textContent = chatContainer.classList.contains('minimized') ? '+' : '−';
     });
   </script>
 </body>
