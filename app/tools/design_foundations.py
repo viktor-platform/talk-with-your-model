@@ -37,19 +37,21 @@ def plot_foundations(merged_data: list[dict[str, Any]], load_case: str, bearing_
         fig.add_shape(
             type="rect",
             x0=x0, y0=y0, x1=x1, y1=y1,
-            line=dict(dash="dash", width=0.3, color="blue")
+            line=dict(dash="dash", width=0.3, color="blue"),
+            fillcolor="rgba(60, 160, 160, 0.2)"
         )
 
         label_text = f"{pad_size/1000:.1f} x {pad_size/1000:.1f} m"
-        fig.add_trace(go.Scatter(
-            x=[x],
-            y=[y],
-            mode="text",
-            text=[label_text],
-            textposition="middle center",
-            textfont=dict(size=9),
-            showlegend=False
-        ))
+
+        fig.add_annotation(
+            x=x,
+            y=y,
+            text=label_text,
+            showarrow=False,
+            font=dict(size=9, color="black"),
+            align="center",
+            bgcolor="rgba(255, 255, 255, 0.7)"
+        )
 
     fig.add_trace(go.Scatter(
         x=x_values,
@@ -124,19 +126,22 @@ def plot_foundations_envelope(merged_data: list[dict[str, Any]], bearing_pressur
         fig.add_shape(
             type="rect",
             x0=x0, y0=y0, x1=x1, y1=y1,
-            line=dict(dash="dash", width=0.3, color="blut")
+            line=dict(dash="dash", width=0.3, color="blue"),
+            fillcolor="rgba(60, 160, 160, 0.2)"
         )
 
         label_text = f"{pad_size/1000:.1f} x {pad_size/1000:.1f} m"
-        fig.add_trace(go.Scatter(
-            x=[x],
-            y=[y],
-            mode="text",
-            text=[label_text],
-            textposition="middle center",
-            textfont=dict(size=9),
-            showlegend=False
-        ))
+
+        fig.add_annotation(
+            x=x,
+            y=y,
+            text=label_text,
+            showarrow=False,
+            font=dict(size=9, color="black"),
+            align="center",
+            bgcolor="rgba(255, 255, 255, 0.7)"
+        )
+
 
     fig.add_trace(go.Scatter(
         x=x_values,

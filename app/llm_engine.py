@@ -1,9 +1,14 @@
 import plotly.graph_objects as go #type: ignore
+import logging
+import pprint
+
+import instructor
+from instructor.dsl.partial import PartialLiteralMixin
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 from openai import OpenAI
 from openai.types.chat import ParsedChatCompletion
-from typing import Any, Literal
+from typing import Any, Literal, Union
 from textwrap import dedent
 
 from app.tools.render_scene import plot_3d_scene
@@ -14,18 +19,26 @@ from app.tools.render_internal_loads import (
 from app.tools.reaction_loads import plot_reaction
 from app.tools.render_displacements import plot_3d_disp_scene
 from app.tools.design_foundations import plot_foundations, plot_foundations_envelope
+from app.parse_xlsx import sheet_names
 from app.models import Entities
 
+# Logger to debug streaming responses
+logger = logging.getLogger(__name__)
+# Load .env variables.
 load_dotenv()
-client = OpenAI()
+# Patch OpenAI Client:
+client = instructor.from_openai(OpenAI())
 
+# Anthropic Client:
+# import anthropic
+# client = instructor.from_anthropic(create=anthropic.Anthropic())
 
 class Tool(BaseModel):
     pass
 
 
 class PlotReactions(Tool):
-    load_case: str | None = Field(
+    load_case: Union[str , None] = Field(
         ...,
         description = dedent("""Load case or combination to be plotted. If the user does 
         not provide one, assign one based on your context and ask the user to confirm it. 
@@ -34,7 +47,7 @@ class PlotReactions(Tool):
 
 
 class PlotModel(Tool):
-    args: Literal["model"] = Field(
+    args: str = Field(
         ...,
         description = dedent("""Plots the structural model. Metadata such as deformation 
         and axial loads can also be plotted.""")
@@ -44,22 +57,22 @@ class PlotModel(Tool):
 class PlotDeformedShape(Tool):
     """Plots the deformed shape of the model for a selected load combo"""
 
-    load_case: str | None = Field(
+    load_case: Union[str, None] = Field(
         ...,
         description = dedent("""Load case or combination for which the deformation or 
         displacements will be plotted.""")
     )
-    scale_factor: float | None = Field(
+    scale_factor: Union[float , None] = Field(
         ...,
         description = dedent("""Optional. If the user wants to plot the deformation of 
         the model with a scale factor, this field can be used. Otherwise, set it to None.""")
     )
 
 
-class PlotInternalForces(Tool):
+class PlotInternalForces(Tool, PartialLiteralMixin):
     """Plots the internal loads of the model for a selected load combo"""
 
-    load_case: str | None = Field(
+    load_case: Union[str , None] = Field(
         ...,
         description = dedent("""Load case or combination for which the internal loads 
         will be plotted. If the user does not provide one, assign one based on your 
@@ -75,9 +88,9 @@ class PlotInternalForces(Tool):
 
 class PadFoundationDesignForLoadCase(Tool):
     """Design Pad foundations based on reaction loads and soil preassure"""
-    load_case: str | None = Field(
+    load_case: str = Field(
         ...,
-        description = dedent("""Load case or combination for which the deformation or 
+        description = dedent("""Single Load case or combination for which the deformation or 
         displacements will be plotted.""")
     )
     soil_pressure: float = Field(
@@ -87,38 +100,72 @@ class PadFoundationDesignForLoadCase(Tool):
     )
 
 class PadFoundationDesignForLoadEnvelope(Tool):
-    """Design Pad foundations based on the enveloped of the reaction loads and soil preassure."""
+    """Design Pad foundations based on the enveloped of the reaction loads and soil preassure for all load cases."""
     soil_pressure: float = Field(
         ...,
         description = dedent("""Soil Pressure value, the user need to provide this values in kN/m2,
-        remind the user about the units when using this tool!, use 100kPa as default""")
+        remind the user about the units when using this tool!, use 100kPa as default, """)
     )    
+    tools_description: str = Field(..., description="Design Pad foundations based on the enveloped of the reaction loads and soil preassure for all load cases.")
 
 class Response(BaseModel):
-    response: str
+    response: str = Field(..., description="Be conversational firendly and Format the response always nicely in MARKDOWN, if the user haven't uploaded the file reminde him and list the required excel sheets!")
     selected_tool: (
-        None | PlotModel | PlotReactions | PlotDeformedShape | PlotInternalForces | PadFoundationDesignForLoadCase | PadFoundationDesignForLoadEnvelope
+        Union[None , PlotReactions , PlotDeformedShape , PlotInternalForces , PadFoundationDesignForLoadCase , PadFoundationDesignForLoadEnvelope]
     ) = Field(..., description="Select any of these tools, otherwise return None")
 
 
-def llm_response(ctx: Any, conversation_history: list[dict]) -> ParsedChatCompletion[Response]:
+def llm_response(ctx: Any, conversation_history: list[dict],
+                 file_status: str = "No File Uploaded",
+                 required_sheets: list[str] = None,
+                 verbose: bool = False) -> ParsedChatCompletion[Response]:
+    if required_sheets is None:
+        required_sheets = sheet_names  # Assuming sheet_names is defined globally
+
     messages = []
     # Default system prompt is always first
     system_message = {
         "role": "system",
         "content": dedent(
-            f"""You are a helpful assistant with the following context, who formats your responses nicely and helps answer questions about a structural model. Respond by describing the functionality of the tools you have without mentioning their names explicitly. If the context is empty, ask the user to upload an XLSX file of their ETABS model. These are the load cases/combinations from the model: {ctx}."""
+            f"""You are a helpful assistant with the following context, who formats your responses nicely and helps answer questions about a structural model.
+            Respond by describing the functionality of the tools you have without mentioning their names explicitly.
+            
+            Important:
+            If the file_status is 'No File Uploaded' or empty, ask the user to upload an XLSX file of their ETABS model with the following sheets: {required_sheets}. List the required sheets in MARKDOWN!. current file_status = {file_status}.
+
+            If file_status is "File Uploaded" AND THE USER HAS NOT MADE ANY REQUEST, be friendly and thank them for uploading the file!
+
+            This is the content from the model: {ctx}.
+            
+            FORMAT YOUR RESPONSES IN MARKDOWN!
+            """
         )
     }
     messages.append(system_message)
     # Append the conversation history as provided by the front end
     messages.extend(conversation_history)
     
-    return client.beta.chat.completions.parse(
+    # Optionally log the messages if verbose is enabled
+    if verbose:
+        logger.debug("Request messages:\n%s", pprint.pformat(messages))
+    
+    # Retrieve response chunks from the client
+    resp_chunks = client.chat.completions.create_partial(
         model="gpt-4o",
         messages=messages,
-        response_format=Response,
+        response_model=Response,
+        temperature=0.5,
     )
+
+    resp_final = None
+    # Streaming
+    for resp in resp_chunks:
+        if verbose:
+            logger.debug("Received response chunk:\n%s", resp)
+        resp_final: Response = resp 
+
+    return resp_final
+
 
 def execute_tool(response: Response, entities: Entities) -> tuple[str, go.Figure | None]:
     """Exectue the tools based on the user query and file_content. Generates a text response
@@ -173,4 +220,3 @@ def execute_tool(response: Response, entities: Entities) -> tuple[str, go.Figure
             )
 
     return response.response, None
-

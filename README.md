@@ -18,22 +18,22 @@ You can ask the AI agent many questions like:
 
 You can even ask what the agent can do! It can also generate visuals, as shown in the sample chat below:
 
-![Internal Loads Tools](assets/internal_loads_tools.JPG)
+![Internal Loads Tools](assets/TTM_GIF1.gif)
 
 ### Post-Process
 
-You can not only ask for results, but also process them. For example, you can make a heat map of the reaction loads:
+You can not only ask for results but also process them. For example, you can make a heat map of the reaction loads, plot deformed shapes, or plot internal loads:
 
-![Reactions Loads](assets/reactions_loads.JPG)
+![Reaction Loads](assets/reactions_loads.JPG)
 
 ### Design Components
 
 All model results are available to support design workflows. For example, the AI agent can help design pad foundations. It will ask for the soil bearing pressure and the load case, then suggest the foundation size. It can also calculate the required footing size:
 
-![Foundation Tools](assets/foundation_tools.JPG)
+![Foundation Tools](assets/TTM_GIF2)
 
 ## Technical Features
 
-No third-party framework is used. All tools and prompts are created using [structured outputs](https://platform.openai.com/docs/guides/structured-outputs?api-mode=chat). The current model provider is OpenAI, but you can use any provider that supports structured output.
+The app requires the OpenAI API. However, the agent is built with the [instructor](https://python.useinstructor.com/) framework, so it can be modified to work with [Anthropic](https://python.useinstructor.com/integrations/anthropic/), [Google's Gemini](https://python.useinstructor.com/integrations/google/), or basically any provider.
 
-Refer to `.env.example` to create a `.env` file with your OpenAI key. **Do not share this API key or push it to GitHub.**
+An OpenAI API key is required and must be stored in a `.env` file (refer to `.env.example`). The app loads it through the `python-dotenv` module. Make sure not to share this API key, push it to any repository, or expose it to the public!

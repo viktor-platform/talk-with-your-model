@@ -68,6 +68,7 @@ class Entities(NamedTuple):
     joints_disp: JoinDispDict
     list_load_combos: list[str]
     reactions_payloads: list[dict[str, Any]]
+    model_context: str
 
 # For memoize -> convert list to tupples
 T = TypeVar('T')

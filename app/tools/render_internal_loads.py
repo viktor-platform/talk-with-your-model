@@ -93,7 +93,6 @@ def generater_station_point(
         if line_id not in comb_forces:
             logging.warning(f"Line {line_id} not found in comb_forces. Skipping.")
             continue
-        logger.info(f"{type(line_id)=}")
         station_dict = comb_forces[line_id][first_load_case]
         # Get station keys sorted by their numeric value.
         station_keys = list(station_dict.keys())

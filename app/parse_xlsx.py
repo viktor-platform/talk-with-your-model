@@ -1,9 +1,7 @@
 import io
-import time
 import pandas as pd  # type: ignore
 
 from typing import IO, Any
-from functools import wraps
 from app.models import (
     Node,
     Frame,
@@ -15,32 +13,25 @@ from app.models import (
 )
 
 
-def timer(fun):
-    @wraps(fun)
-    def wrapped(*args, **kwargs):
-        start = time.time()
-        out = fun(*args, **kwargs)
-        print(f"Execution time for {fun.__name__}, was: {time.time() - start}")
-        return out
+sheet_names = [
+    "Objects and Elements - Joints",
+    "Group Assignments",
+    "Beam Object Connectivity",
+    "Frame Assigns - Sect Prop",
+    "Element Joint Forces - Frame",
+    "Column Object Connectivity",
+    "Element Forces - Beams",
+    "Element Forces - Columns",
+    "Joint Displacements",
+    "Joint Reactions",
+    "Modal Periods And Frequencies",
+    "Material List by Section Prop"
+]
 
-    return wrapped
 
 
-@timer
-def extract_sheets(file_content: str | bytes) -> dict[str, pd.DataFrame]:
+def extract_sheets(file_content: str | bytes, sheet_name=sheet_names) -> dict[str, pd.DataFrame]:
     """Extract the relevant sheets from the uploaded file."""
-    sheet_names = [
-        "Objects and Elements - Joints",
-        "Group Assignments",
-        "Beam Object Connectivity",
-        "Frame Assigns - Sect Prop",
-        "Element Joint Forces - Frame",
-        "Column Object Connectivity",
-        "Element Forces - Beams",
-        "Element Forces - Columns",
-        "Joint Displacements",
-        "Joint Reactions"
-    ]
     dataframes: dict[str, pd.DataFrame] = {}
     excel_data: str | IO[bytes]
 
@@ -56,7 +47,6 @@ def extract_sheets(file_content: str | bytes) -> dict[str, pd.DataFrame]:
     return dataframes
 
 
-@timer
 def get_load_combos(sheets_data: dict[str, pd.DataFrame]) -> list[str]:
     """Reads the file content, creates a DataFrame and get a list of load combos."""
     sheet_name = "Element Joint Forces - Frame"
@@ -67,7 +57,6 @@ def get_load_combos(sheets_data: dict[str, pd.DataFrame]) -> list[str]:
     return combos
 
 
-@timer
 def get_internal_loads(sheets_data: dict[str, pd.DataFrame]) -> CombForcesDict:
     """Read the pd.DataFrame and returns P, V2, V3, T, M2, M3 for each load combo and for each frame id"""
     beam_sheet_name = "Element Forces - Beams"
@@ -103,7 +92,6 @@ def get_internal_loads(sheets_data: dict[str, pd.DataFrame]) -> CombForcesDict:
     return comb_forces_dict
 
 
-@timer
 def get_entities(
     file_content: str | bytes,
 ) -> tuple[
@@ -177,6 +165,8 @@ def get_entities(
     list_load_combs = get_load_combos(sheets_data=sheets_data)
     # 7.0 Get reactions loads and support coords.
     reaction_payload = process_etabs_file(data_sheet=sheets_data)
+    # 8.0 Model Context
+    model_context = get_model_ctx(data_sheet=sheets_data)
 
     return (
         nodes_dict,
@@ -186,10 +176,10 @@ def get_entities(
         joint_disp_dict,
         list_load_combs,
         reaction_payload,
+        model_context
     )
 
 
-@timer
 def get_displacements(sheets_data: dict[str, pd.DataFrame]) -> JoinDispDict:
     """
     Get the displacements from a DataFrame for each node.
@@ -227,9 +217,72 @@ def get_displacements(sheets_data: dict[str, pd.DataFrame]) -> JoinDispDict:
 
     return joint_disp_dict
 
+def get_modal_parameters(sheets_data: dict[str, 'pd.DataFrame']) -> str:
+    # Select the appropriate sheet
+    sheet_name = "Modal Periods And Frequencies"
+    modal_df = sheets_data[sheet_name]
+    # Define the markdown table header and separator rows
+    header = "| Mode # | Period [s] | Frequency [Hz] |"
+    separator = "| ------ | ---------- | -------------- |"
+    # Start the table with header and separator
+    rows = [header, separator]
+    # Iterate over the DataFrame and add rows for indices greater than 1
+    for index, row in modal_df.iterrows():
+        if index > 0:
+            mode_val = row["Mode"]
+            period_val = round(row["Period"], 2)
+            frequency_val = round(row["Frequency"], 2)
+            rows.append(f"| {mode_val} | {period_val} | {frequency_val} |")
+    # Join all rows into a single markdown string and return it
+    markdown_table = "\n".join(rows)
+    return markdown_table
+
+def get_material_bill(sheets_data: dict[str, 'pd.DataFrame']) -> str:
+    # Select the appropriate sheet
+    sheet_name = "Material List by Section Prop"
+    df = sheets_data[sheet_name]
+    df = df.fillna("-")
+    # Define the markdown table header and separator rows
+    header = "| Section | Object Type | Number Pieces | Length (m) | Weight (kN) |"
+    separator = "| ------- | ----------- | ------------- | ---------- | ----------- |"
+    # Start the table with header and separator
+    rows = [header, separator]
+    # Iterate over the DataFrame and add rows for indices greater than 0
+    for index, row in df.iterrows():
+        if index > 0:
+            section_val = row["Section"]
+            object_type_val = row["Object Type"]
+            number_pieces_val = row["Number Pieces"]
+            if not isinstance(row["Length"], str):
+                length_val = round(row["Length"],2)
+                weight_val = round(row["Weight"],2)
+            # Add a row to the table
+            rows.append(
+                f"| {section_val} | {object_type_val} | {number_pieces_val} | "
+                f"{length_val} | {weight_val} | "
+            )
+    # Join all rows into a single markdown string
+    markdown_table = "\n".join(rows)
+    return markdown_table
+
+def get_model_ctx(data_sheet: dict[str, pd.DataFrame])->str:
+    """Get the model context from the xlsx file."""
+    # Get modal table.
+    modal_table = get_modal_parameters(data_sheet)
+    # Get material bill table.
+    material_bill = get_material_bill(data_sheet)
+    # Get load combos.
+    load_combos = get_load_combos(data_sheet)
+    load_combos_str = "\n".join(f"{i+1}. {combo}" for i, combo in enumerate(load_combos))
+    # Join all tables into a single markdown string.
+    model_ctx = (
+        f"### Modal Parameters\n{modal_table}\n\n"
+        f"### Material Bill\n{material_bill}\n\n"
+        f"### Load Combos\n{load_combos_str}\n"
+    )
+    return model_ctx
 
 
-@timer
 def process_etabs_file(data_sheet: dict[str, pd.DataFrame]) -> list[dict[str, Any]]:
     """Get the reactions load and support node cords for tools usage!"""
     # Process the 'Joint Reactions' dataframe

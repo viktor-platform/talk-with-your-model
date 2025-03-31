@@ -39,7 +39,7 @@ class Parametrization(vkt.Parametrization):
 
 
 class Controller(vkt.Controller):
-    parametrization = Parametrization(width=25)
+    parametrization = Parametrization(width=20)
 
     @vkt.WebView("Web View")
     def app_view(self, params, **kwargs)-> vkt.WebResult:
@@ -64,24 +64,25 @@ class Controller(vkt.Controller):
                 conversation_history = json.loads(params.conversation_history)
                 if conversation_history and conversation_history[-1]["role"] == "user":
                         if payload:
-                            # Memoize converts entities to list!
                             response = llm_response(
-                                ctx=payload.list_load_combos,
-                                conversation_history=conversation_history
+                                ctx=payload.model_context,
+                                conversation_history=conversation_history,
+                                file_status="File Uploaded"
                             )
-                            parsed_response = response.choices[0].message.parsed
-                            if parsed_response:
+
+                            if response:
                                 # This might return a text response and a figure
                                 llm_message, generated_fig = execute_tool(
-                                    response=parsed_response,
+                                    response=response,
                                     entities=payload
                                 )
                                 # Use the generated figure for fig2
                                 if generated_fig is not None:
                                     fig2 = generated_fig
-
+                                
                                 # Append the LLM response to messages
                                 conversation_history.append({"role": "assistant", "content": llm_message})
+                                
                             else:
                                 raise ValueError("The LLM returned no parsed response.")
                         else:
@@ -90,9 +91,9 @@ class Controller(vkt.Controller):
                                 conversation_history=conversation_history,
                                 ctx="No model uploaded!",
                             )
-                            parsed_response = response.choices[0].message.parsed
-                            if parsed_response:
-                                conversation_history.append({"role": "assistant", "content": parsed_response.response})
+                            # parsed_response = response.choices[0].message.parsed
+                            if response:
+                                conversation_history.append({"role": "assistant", "content": response.response})
                             else:
                                 raise ValueError("The LLM returned no parsed response.")
 
