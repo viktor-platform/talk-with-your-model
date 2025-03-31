@@ -30,7 +30,7 @@ You can not only ask for results but also process them. For example, you can mak
 
 All model results are available to support design workflows. For example, the AI agent can help design pad foundations. It will ask for the soil bearing pressure and the load case, then suggest the foundation size. It can also calculate the required footing size:
 
-![Foundation Tools](assets/TTM_GIF2)
+![Foundation Tools](assets/TTM_GIF2.gif)
 
 ## Technical Features
 
