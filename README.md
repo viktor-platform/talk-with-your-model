@@ -1,4 +1,4 @@
-# Talk with Your ETABS Model! (Work in Progress)
+# Talk with Your ETABS Model!
 
 ## Features
 
@@ -30,7 +30,7 @@ You can not only ask for results but also process them. For example, you can mak
 
 All model results are available to support design workflows. For example, the AI agent can help design pad foundations. It will ask for the soil bearing pressure and the load case, then suggest the foundation size. It can also calculate the required footing size:
 
-![Foundation Tools](assets/TTM_GIF2.gif)
+![Foundation Tools](assets/foundation_tools.JPG)
 
 ## Technical Features
 
