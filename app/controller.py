@@ -1,16 +1,25 @@
-import viktor as vkt # type: ignore
-import base64
-import os
+import viktor as vkt  # type: ignore
 import json
+import plotly.graph_objects as go
 
-from pathlib import Path
 from textwrap import dedent
-
 from app.tools.render_scene import default_blank_scene
 from app.llm_engine import llm_response, execute_tool
 from app.tools.render_scene import plot_3d_scene
 from app.parse_xlsx import get_entities
 from app.models import Entities, memoize_corrector
+from typing import Literal
+
+
+def store_scene(figure: go.Figure, view_name: Literal["view"] = "view") -> None:
+    """This function stores the output of a tool call in
+    the vkt.Storage object. The storage object can be used to communicate
+    between views."""
+    vkt.Storage().set(
+        view_name,
+        data=vkt.File.from_data(figure.to_json().encode()),
+        scope="entity",
+    )
 
 
 @memoize_corrector(Entities)
@@ -34,91 +43,98 @@ class Parametrization(vkt.Parametrization):
         click on the file loader below, and upload the `.xlsx` file.
         """)
     )
-    xlsx_file = vkt.FileField("**Upload a .xlsx file:**", flex=50)
-    conversation_history = vkt.HiddenField(name="conversation_history", ui_name="conversation_history") 
+    chat = vkt.Chat("## AI Agent", method="call_llm")
+    xlsx_file = vkt.FileField("**Upload a .xlsx file:**", flex=100)
+    conversation_history = vkt.HiddenField(
+        name="conversation_history", ui_name="conversation_history"
+    )
 
 
 class Controller(vkt.Controller):
-    parametrization = Parametrization(width=20)
+    parametrization = Parametrization(width=35)
 
-    @vkt.WebView("Web View")
-    def app_view(self, params, **kwargs)-> vkt.WebResult:
-        # Default messages array
-        messages = []
-        # FIGURE 1: default black or blank scene
-        fig1 = default_blank_scene()
-        # FIGURE 2: default blank scene unless conditions are met
-        fig2 = default_blank_scene()
-        # Check if user uploaded an Excel file
+    def call_llm(self, params, **kwargs) -> vkt.ChatResult:
+        """Multi-turn conversation between the user and the agent."""
+        # Get conversation
+        conversation_history = params.chat.get_messages()
         payload: None | Entities = None
+        #  Check if user uploaded an Excel Field
         if params.xlsx_file:
             # Parse entities from the Excel
             entities = read_file_binary(params.xlsx_file)
             payload = entities
-            # Create a 3D scene for fig1
-            fig1 = plot_3d_scene(payload.nodes, payload.frames)
+            # Create a 3D scene
+            fig = plot_3d_scene(payload.nodes, payload.frames)
+            # Save fig in memory this acts as hook to send the figure
+            # to the PLotlyView
+            store_scene(fig)
 
-        # Process chat messages
-        if params.conversation_history:
+        # Conversation loop + function calls
+        if conversation_history:
             try:
-                conversation_history = json.loads(params.conversation_history)
-                if conversation_history and conversation_history[-1]["role"] == "user":
-                        if payload:
-                            response = llm_response(
-                                ctx=payload.model_context,
-                                conversation_history=conversation_history,
-                                file_status="File Uploaded"
+                if conversation_history[-1]["role"] == "user":
+                    if payload:
+                        # Send conversation history to the LLM
+                        response = llm_response(
+                            ctx=payload.model_context,
+                            conversation_history=conversation_history,
+                            file_status="File Uploaded",
+                        )
+                        # Process response
+                        if response:
+                            llm_message, generated_fig = execute_tool(
+                                response=response, entities=payload
                             )
-
-                            if response:
-                                # This might return a text response and a figure
-                                llm_message, generated_fig = execute_tool(
-                                    response=response,
-                                    entities=payload
-                                )
-                                # Use the generated figure for fig2
-                                if generated_fig is not None:
-                                    fig2 = generated_fig
-                                
-                                # Append the LLM response to messages
-                                conversation_history.append({"role": "assistant", "content": llm_message})
-                                
-                            else:
-                                raise ValueError("The LLM returned no parsed response.")
+                            # Generated_fig is the output of a function call.
+                            # If there is no function call execution, then it is None.
+                            if generated_fig:
+                                fig2 = generated_fig
+                                # Store function call output in memory
+                                store_scene(fig2)
+                            return vkt.ChatResult(params.chat, llm_message)
                         else:
-                            # No file is uploaded
-                            response = llm_response(
-                                conversation_history=conversation_history,
-                                ctx="No model uploaded!",
-                            )
-                            # parsed_response = response.choices[0].message.parsed
-                            if response:
-                                conversation_history.append({"role": "assistant", "content": response.response})
-                            else:
-                                raise ValueError("The LLM returned no parsed response.")
+                            raise ValueError("The LLM returned no parsed response.")
 
-                messages = conversation_history
+                    # No payload -> No model ctx.
+                    else:
+                        response = llm_response(
+                            conversation_history=conversation_history,
+                            ctx="No model uploaded!",
+                        )
+
+                        if response:
+                            return vkt.ChatResult(params.chat, response.response)
+                        else:
+                            raise ValueError("The LLM returned no parsed reponse.")
+
             except Exception as e:
                 print(f"Error processing user query: {e}")
 
-        # Load the HTML template
-        html_path = Path(__file__).parent / "canvas.html"
-        html = html_path.read_text()
+    @vkt.PlotlyView("Plotting Tool", width=100)
+    def get_plotly_view(self, params, **kwargs) -> vkt.PlotlyResult:
+        """This view plots the output of a tool call in a Plotly view.
+        All tool calls are go.Figures exported as JSON. They are saved in
+        Storage and retrieved here."""
+        # 1. Delete tools calls from storage if there is no .xlsx file
+        if not params.xlsx_file:
+            entities = vkt.Storage().list(scope="entity")
+            for entity in entities:
+                if entity == "view":
+                    vkt.Storage().delete("view", scope="entity")
 
-        # Encode fig1 and fig2
-        plotly_scene_json1 = fig1.to_json()
-        plotly_scene_json2 = fig2.to_json()
-        plotly_json_base64_1 = base64.b64encode(plotly_scene_json1.encode()).decode()
-        plotly_json_base64_2 = base64.b64encode(plotly_scene_json2.encode()).decode()
+        # 2. Try to get the previous view from the tool call, otherwise plot the model!
+        try:
+            raw = vkt.Storage().get("view", scope="entity").getvalue()
+            fig = go.Figure(json.loads(raw))
+        except Exception:
+            # If there is no uploaded .xlsx file, then a blank view is plotted.
+            if params.xlsx_file:
+                # Parse entities from the Excel
+                entities = read_file_binary(params.xlsx_file)
+                payload = entities
+                # Create a 3D scene for fig1
+                fig = plot_3d_scene(payload.nodes, payload.frames)
+            else:
+                fig = default_blank_scene()
 
-        # Encode messages
-        messages_json = json.dumps(messages)
-        messages_json_base64 = base64.b64encode(messages_json.encode()).decode()
-
-        # Replace placeholders
-        html = html.replace("PLOTLY_JSON_SCENE_1", plotly_json_base64_1)
-        html = html.replace("PLOTLY_JSON_SCENE_2", plotly_json_base64_2)
-        html = html.replace("MESSAGES_JSON", messages_json_base64)
-        html = html.replace("VIKTOR_JS_SDK", os.environ["VIKTOR_JS_SDK_PATH"] + "v1.js")
-
-        return vkt.WebResult(html=html)
+        return vkt.PlotlyResult(fig.to_json())

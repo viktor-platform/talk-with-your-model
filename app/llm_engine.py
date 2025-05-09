@@ -109,7 +109,7 @@ class PadFoundationDesignForLoadEnvelope(Tool):
     tools_description: str = Field(..., description="Design Pad foundations based on the enveloped of the reaction loads and soil preassure for all load cases.")
 
 class Response(BaseModel):
-    response: str = Field(..., description="Be conversational firendly and Format the response always nicely in MARKDOWN, if the user haven't uploaded the file reminde him and list the required excel sheets!")
+    response: str = Field(..., description="Be conversational firendly and Format the response always nicely, if the user haven't uploaded the file reminde him and list the required excel sheets!")
     selected_tool: (
         Union[None , PlotReactions , PlotDeformedShape , PlotInternalForces , PadFoundationDesignForLoadCase , PadFoundationDesignForLoadEnvelope]
     ) = Field(..., description="Select any of these tools, otherwise return None")
@@ -131,13 +131,17 @@ def llm_response(ctx: Any, conversation_history: list[dict],
             Respond by describing the functionality of the tools you have without mentioning their names explicitly.
             
             Important:
-            If the file_status is 'No File Uploaded' or empty, ask the user to upload an XLSX file of their ETABS model with the following sheets: {required_sheets}. List the required sheets in MARKDOWN!. current file_status = {file_status}.
+            If the file_status is 'No File Uploaded' or empty, ask the user to upload an XLSX file of their ETABS model with the following sheets: {required_sheets}. current file_status = {file_status}.
 
             If file_status is "File Uploaded" AND THE USER HAS NOT MADE ANY REQUEST, be friendly and thank them for uploading the file!
 
             This is the content from the model: {ctx}.
+
+            Format all responses Nicely without using Markdown!
+            Format all responses Nicely without using Markdown!
+            Format all responses Nicely without using Markdown!
+            ALSO CONVERT LIST [ITEM1, ITEM2, ITEM3] TO nice itemization!
             
-            FORMAT YOUR RESPONSES IN MARKDOWN!
             """
         )
     }
