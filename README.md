@@ -34,6 +34,33 @@ All model results are available to support design workflows. For example, the AI
 
 ## Technical Features
 
-The app requires the OpenAI API. However, the agent is built with the [instructor](https://python.useinstructor.com/) framework, so it can be modified to work with [Anthropic](https://python.useinstructor.com/integrations/anthropic/), [Google's Gemini](https://python.useinstructor.com/integrations/google/), or basically any provider.
+The app requires the OpenAI API. However, the agent is built with the [instructor](https://python.useinstructor.com/) framework, so it can be modified to work with [Anthropic](https://python.useinstructor.com/integrations/anthropic/).
 
 An OpenAI API key is required and must be stored in a `.env` file (refer to `.env.example`). The app loads it through the `python-dotenv` module. Make sure not to share this API key, push it to any repository, or expose it to the public!
+
+## Integration between the Llm and vkt.Views
+
+1. `vkt.Chat` maintains the conversation. In its callback you retrieve the message history and send it to the LLM.  
+2. The LLM returns either:  
+   1. Plain text → update chat with `vkt.ChatResult(params.chat, text)`.  
+   2. A structured function call with input arguments.  
+3. For a function call:  
+   1. Map arguments to the corresponding function in `app/tools`.  
+   2. Execute the function to produce a Plotly figure.  
+   3. Serialize the figure to JSON and save it via  
+      ```python
+      vkt.Storage().set("view", data=vkt.File.from_data(figure.to_json().encode()), scope="entity")
+      ```  
+4. The `@vkt.PlotlyView` method then:  
+   1. Retrieves the JSON with  
+      ```python
+      raw = vkt.Storage().get("view", scope="entity").getvalue()
+      ```  
+   2. Reconstructs the figure using  
+      ```python
+      fig = go.Figure(json.loads(raw))
+      ```  
+   3. Returns `vkt.PlotlyResult(fig.to_json())` to render the view.  
+5. The controller manages storage lifecycle—deleting or updating stored views when the input file changes or is removed.  
+
+![workflow](assets/workflow.svg)
